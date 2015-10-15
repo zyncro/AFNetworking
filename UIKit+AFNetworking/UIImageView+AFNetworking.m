@@ -81,7 +81,7 @@
 #pragma clang diagnostic pop
 }
 
-+ (void)setSharedImageCache:(__nullable id <AFImageCache>)imageCache {
++ (void)setSharedImageCache:(id <AFImageCache>)imageCache {
     objc_setAssociatedObject(self, @selector(sharedImageCache), imageCache, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 
@@ -116,20 +116,21 @@
     NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
     [request addValue:@"image/*" forHTTPHeaderField:@"Accept"];
 
-    [self setImageWithURLRequest:request placeholderImage:placeholderImage success:nil failure:nil];
+    [self setImageWithURLRequest:request placeholderImage:placeholderImage accessToken:nil success:nil failure:nil];
 }
 
-- (void)setImageWithURLRequest:(NSURLRequest *)urlRequest
+- (void)setImageWithURLRequest:(NSMutableURLRequest *)urlRequest
               placeholderImage:(UIImage *)placeholderImage
-                       success:(void (^)(NSURLRequest *request, NSHTTPURLResponse * __nullable response, UIImage *image))success
-                       failure:(void (^)(NSURLRequest *request, NSHTTPURLResponse * __nullable response, NSError *error))failure
+                   accessToken:(NSString *)accessToken
+                       success:(void (^)(NSURLRequest *request, NSHTTPURLResponse *response, UIImage *image))success
+                       failure:(void (^)(NSURLRequest *request, NSHTTPURLResponse *response, NSError *error))failure
 {
     [self cancelImageRequestOperation];
 
     UIImage *cachedImage = [[[self class] sharedImageCache] cachedImageForRequest:urlRequest];
     if (cachedImage) {
         if (success) {
-            success(urlRequest, nil, cachedImage);
+            success(nil, nil, cachedImage);
         } else {
             self.image = cachedImage;
         }
@@ -141,8 +142,13 @@
         }
 
         __weak __typeof(self)weakSelf = self;
+        
+        NSString *authorization = [NSString stringWithFormat:@"Bearer %@", accessToken];
+        [urlRequest setValue:authorization forHTTPHeaderField:@"Authorization"];
+
         self.af_imageRequestOperation = [[AFHTTPRequestOperation alloc] initWithRequest:urlRequest];
         self.af_imageRequestOperation.responseSerializer = self.imageResponseSerializer;
+        
         [self.af_imageRequestOperation setCompletionBlockWithSuccess:^(AFHTTPRequestOperation *operation, id responseObject) {
             __strong __typeof(weakSelf)strongSelf = weakSelf;
             if ([[urlRequest URL] isEqual:[strongSelf.af_imageRequestOperation.request URL]]) {
